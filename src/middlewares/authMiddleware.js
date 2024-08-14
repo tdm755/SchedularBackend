@@ -1,28 +1,16 @@
-const passport = require('../config/passport.config');
-const { generateResponse } = require('../utils/responseUtils');
+// src/middleware/authMiddleware.js
+const jwt = require('jsonwebtoken');
 
-exports.verifyTokenAndSession = (req, res, next) => {
-  passport.authenticate('jwt', { session: false }, (err, user) => {
-    if (err || !user) {
-      return generateResponse(res, 401, 'Unauthorized');
+module.exports = (req, res, next) => {
+  try {
+    const token = req.cookies[process.env.COOKIE_NAME];
+    if (!token) {
+      return res.status(401).json({ message: 'Authentication failed' });
     }
-    req.user = user;
+    const decodedToken = jwt.verify(token, process.env.JWT_SECRET);
+    req.user = { id: decodedToken.userId };
     next();
-  })(req, res, next);
-};
-
-exports.adminCheckAuth = (req, res, next) => {
-  if (req.user && req.user.role === 'admin') {
-    next();
-  } else {
-    generateResponse(res, 403, 'Access denied. Admin only.');
-  }
-};
-
-exports.userCheckAuth = (req, res, next) => {
-  if (req.user && req.user.role === 'user') {
-    next();
-  } else {
-    generateResponse(res, 403, 'Access denied. User only.');
+  } catch (error) {
+    res.status(401).json({ message: 'Authentication failed' });
   }
 };

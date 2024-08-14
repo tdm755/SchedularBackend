@@ -1,58 +1,45 @@
 const express = require('express');
-const bodyParser = require('body-parser');
-const cookieParser = require('cookie-parser');
 const cors = require('cors');
-const session = require('express-session');
-require('dotenv').config();
+const cookieParser = require('cookie-parser');
+const rateLimit = require('express-rate-limit');
 const sequelize = require('./src/config/db.config');
-const passport = require('./src/config/passport.config');
-
-const adminAuthRoutes = require('./src/routes/adminRoutes');
-const userAuthRoutes = require('./src/routes/userRoutes');
+const taskRoutes = require('./src/routes/taskRoutes');
+const errorHandler = require('./src/middlewares/errorHandler');
+require('dotenv').config();
 
 const app = express();
 
+// Middleware
 app.use(cors({
-  origin: [process.env.USER_BASE_URL, process.env.ADMIN_BASE_URL],
-  credentials: true,
+  origin: process.env.CORS_ORIGIN,
+  credentials: true
 }));
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+app.use(cookieParser(process.env.COOKIE_SECRET));
 
-app.use(cookieParser());
-app.use(bodyParser.json({ limit: '50mb' }));
-app.use(bodyParser.urlencoded({ limit: '50mb', extended: true }));
-
-app.use(session({
-  secret: process.env.SESSION_SECRET || 'your_session_secret',
-  resave: false,
-  saveUninitialized: false,
-  cookie: {
-    secure: process.env.NODE_ENV === 'production',
-    maxAge: parseInt(process.env.JWT_COOKIE_EXPIRES_IN)
-  }
-}));
-
-app.use(passport.initialize());
-app.use(passport.session());
-
-app.use('/api/admin', adminAuthRoutes);
-app.use('/api/user', userAuthRoutes);
-
-app.use((err, req, res, next) => {
-  console.error(err.stack);
-  res.status(500).json({ message: 'Internal Server Error' });
+// Rate limiting
+const limiter = rateLimit({
+  windowMs: process.env.RATE_LIMIT_WINDOW_MS,
+  max: process.env.RATE_LIMIT_MAX
 });
+app.use(limiter);
 
-const PORT = process.env.PORT || 3000;
-const BASE_URL = process.env.BACKEND_URL || `http://localhost:${PORT}`;
+// Routes
+app.use('/api/tasks', taskRoutes);
 
-sequelize.sync()
+// Error handling middleware
+app.use(errorHandler);
+
+const PORT = process.env.PORT || 5000;
+
+sequelize.sync({ force: false })
   .then(() => {
+    console.log('Database connected');
     app.listen(PORT, () => {
       console.log(`Server is running on port ${PORT}`);
-      console.log(`Admin endpoints: ${BASE_URL}/api/admin`);
-      console.log(`User endpoints: ${BASE_URL}/api/user`);
     });
   })
-  .catch((err) => {
+  .catch(err => {
     console.error('Unable to connect to the database:', err);
   });
